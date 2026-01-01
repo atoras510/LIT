@@ -1,0 +1,783 @@
+<!-- index.html -->
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lighter Orderbook + Tape (2049)</title>
+  <style>
+    :root{
+      --bg:#0b0f14;
+      --panel:#101826;
+      --panel2:#0e1520;
+      --border:#263043;
+      --text:#cbd5e1;
+      --muted:#64748b;
+      --ask:#ff5a5f;
+      --bid:#34d399;
+      --buy:#22c55e;
+      --sell:#ef4444;
+      --white:#ffffff;
+    }
+    *{box-sizing:border-box;}
+    body{
+      margin:0;
+      background:var(--bg);
+      color:var(--text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    .wrap{
+      display:grid;
+      grid-template-columns: 1fr 380px;
+      gap:12px;
+      padding:12px;
+      height:100vh;
+    }
+    .card{
+      background:linear-gradient(180deg, var(--panel), var(--panel2));
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:12px;
+      overflow:hidden;
+      min-height:0;
+    }
+    .topbar{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:10px;
+      flex-wrap:wrap;
+    }
+    .title{
+      font-weight:700;
+      letter-spacing:.4px;
+    }
+    .status{
+      font-size:12px;
+      color:var(--muted);
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    .pill{
+      border:1px solid var(--border);
+      padding:4px 8px;
+      border-radius:999px;
+      background:#0b1220;
+    }
+    .row{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    input, select, button, textarea{
+      background:#0b1220;
+      border:1px solid var(--border);
+      color:var(--text);
+      border-radius:10px;
+      padding:8px 10px;
+      font-family:inherit;
+      font-size:13px;
+      outline:none;
+    }
+    input:focus, textarea:focus{
+      border-color:#3b82f6;
+    }
+    button{
+      cursor:pointer;
+    }
+    button:hover{
+      border-color:#3b82f6;
+    }
+    button.danger:hover{border-color:var(--sell);}
+    button.primary{
+      border-color:#3b82f6;
+    }
+    .grid2{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:8px;
+    }
+    .tableWrap{
+      height:calc(100vh - 120px);
+      overflow:auto;
+      border-radius:10px;
+      border:1px solid var(--border);
+    }
+    table{
+      width:100%;
+      border-collapse:collapse;
+      table-layout:fixed; /* 列幅固定 */
+      font-size:13px;
+    }
+    thead th{
+      position:sticky;
+      top:0;
+      z-index:2;
+      background:#0b1220;
+      border-bottom:1px solid var(--border);
+      padding:8px 8px;
+      text-align:right;
+      color:#e2e8f0;
+      font-weight:700;
+    }
+    tbody td{
+      border-bottom:1px solid rgba(38,48,67,.6);
+      padding:6px 8px;
+      text-align:right;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    tbody tr:hover td{
+      background:rgba(59,130,246,.08);
+    }
+    .ask{color:var(--ask);}
+    .bid{color:var(--bid);}
+    .buy{color:var(--buy);}
+    .sell{color:var(--sell);}
+    .tag{color:var(--white); font-weight:700;}
+    .muted{color:var(--muted);}
+    .sizeCell{
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      gap:8px;
+    }
+    .bar{
+      width:110px;
+      height:10px;
+      border:1px solid rgba(38,48,67,.8);
+      border-radius:999px;
+      overflow:hidden;
+      background:#07101c;
+      flex:0 0 auto;
+    }
+    .bar > div{
+      height:100%;
+      width:0%;
+      background:currentColor; /* ask/bid 色 */
+      opacity:.85;
+    }
+
+    /* 右側（タグ管理） */
+    .sideTitle{font-weight:700; margin-bottom:8px;}
+    .help{
+      font-size:12px;
+      color:var(--muted);
+      line-height:1.4;
+      margin:8px 0 12px;
+    }
+    .tagTable{
+      width:100%;
+      border-collapse:collapse;
+      table-layout:fixed;
+      font-size:12px;
+    }
+    .tagTable th, .tagTable td{
+      border-bottom:1px solid rgba(38,48,67,.6);
+      padding:6px 6px;
+      text-align:left;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .tagTable th{
+      position:sticky;
+      top:0;
+      background:#0b1220;
+      z-index:2;
+    }
+    .tagActions{
+      display:flex;
+      gap:6px;
+      justify-content:flex-end;
+    }
+    .small{
+      font-size:12px;
+      padding:6px 8px;
+      border-radius:10px;
+    }
+    .hr{
+      height:1px;
+      background:rgba(38,48,67,.8);
+      margin:12px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <!-- MAIN -->
+    <div class="card">
+      <div class="topbar">
+        <div class="row">
+          <div class="title">Lighter Orderbook + Tape</div>
+          <div class="pill muted" id="endpointPill">REST: /orderBookOrders | WS: /stream</div>
+        </div>
+        <div class="row">
+          <label class="muted">Market</label>
+          <input id="marketInput" type="number" value="2049" style="width:110px" />
+          <label class="muted">REST interval</label>
+          <input id="restIntervalInput" type="number" value="1.0" step="0.1" style="width:90px" />
+          <button id="applyBtn" class="primary">適用</button>
+          <button id="pauseBtn">一時停止</button>
+        </div>
+      </div>
+
+      <div class="status">
+        <div class="pill" id="wsStatus">WS: connecting...</div>
+        <div class="pill" id="restStatus">REST: -</div>
+        <div class="pill" id="tapeStatus">Tape: 0</div>
+        <div class="pill" id="errStatus">OK</div>
+      </div>
+
+      <div class="tableWrap" style="margin-top:10px;">
+        <table id="obTable">
+          <thead>
+            <tr>
+              <th style="width:110px;">Price</th>
+              <th style="width:240px;">Size (ETH)</th>
+              <th style="width:110px;">Total</th>
+              <th style="width:210px; text-align:right;">Order Acct</th>
+              <th style="width:110px;">Tape Size</th>
+              <th style="width:210px;">Taker/Maker</th>
+            </tr>
+          </thead>
+          <tbody id="obTbody">
+            <!-- rows -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- SIDE: TAG MANAGER -->
+    <div class="card" style="min-height:0; overflow:auto;">
+      <div class="sideTitle">アドレスタグ管理（account index → label）</div>
+      <div class="help">
+        - 追加/削除/編集はここでOK（保存は自動でLocalStorage）<br/>
+        - Order Acct / Tape の account index が一致すると label 表示（白）<br/>
+        - Export/Import で共有可能
+      </div>
+
+      <div class="grid2">
+        <div>
+          <div class="muted" style="margin-bottom:6px;">Account Index</div>
+          <input id="tagIndex" placeholder="例: 652598" />
+        </div>
+        <div>
+          <div class="muted" style="margin-bottom:6px;">Label</div>
+          <input id="tagLabel" placeholder="例: jump" />
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px; justify-content:flex-end;">
+        <button id="addUpdateBtn" class="primary">追加 / 更新</button>
+        <button id="clearFormBtn">フォームクリア</button>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="row" style="justify-content:space-between; align-items:center;">
+        <div class="muted">登録タグ</div>
+        <div class="row">
+          <button id="exportBtn" class="small">Export JSON</button>
+          <button id="importBtn" class="small">Import JSON</button>
+          <button id="resetBtn" class="small danger">初期タグに戻す</button>
+        </div>
+      </div>
+
+      <div style="margin-top:8px; border:1px solid var(--border); border-radius:10px; overflow:hidden;">
+        <table class="tagTable">
+          <thead>
+            <tr>
+              <th style="width:110px;">index</th>
+              <th>label</th>
+              <th style="width:140px; text-align:right;">actions</th>
+            </tr>
+          </thead>
+          <tbody id="tagTbody"></tbody>
+        </table>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="muted" style="margin-bottom:6px;">Import / Export JSON</div>
+      <textarea id="jsonBox" rows="6" placeholder='{"693084":"team","652598":"jump"}'></textarea>
+      <div class="row" style="margin-top:10px; justify-content:flex-end;">
+        <button id="applyJsonBtn" class="primary">JSON適用</button>
+        <button id="copyJsonBtn">コピー</button>
+      </div>
+
+      <div class="help">
+        ※ REST がCORSで失敗する場合：同梱の <span class="tag">proxy.py</span> を使って同一オリジンにすると動きます。
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // ========= Default tag sets (あなたのTEAM/JUMP/JUSTIN) =========
+  const DEFAULT_TAGS = (() => {
+    const TEAM = [
+      693084,693070,693065,693062,2543,693148,693145,693142,693141,2687,
+      693160,693158,693157,693155,2708,693120,693113,693111,693088,2617,
+      693057,693053,693038,693017,1710
+    ];
+    const JUMP = [
+      652598,652609,668453,652594,668570,668510,668489,652616,652565,
+      668504,652603,652600,652564,652613,652618,652587,652611,652619,
+      652615,652607,668516,688859,688862,688864
+    ];
+    const JUSTIN = [651738];
+    const m = {};
+    TEAM.forEach(x => m[String(x)] = "team");
+    JUMP.forEach(x => m[String(x)] = "jump");
+    JUSTIN.forEach(x => m[String(x)] = "justin");
+    return m;
+  })();
+
+  const LS_KEY = "lighter_tags_v1";
+  function loadTags() {
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (!raw) return {...DEFAULT_TAGS};
+      const obj = JSON.parse(raw);
+      if (obj && typeof obj === "object") return obj;
+    } catch {}
+    return {...DEFAULT_TAGS};
+  }
+  function saveTags() {
+    localStorage.setItem(LS_KEY, JSON.stringify(TAGS));
+    renderTagTable();
+  }
+
+  let TAGS = loadTags();
+
+  // ========= Config =========
+  let MARKET_ID = 2049;
+  let DISPLAY_LEVELS = 20;
+  let FETCH_LIMIT = 200;
+  let REST_INTERVAL_MS = 1000;
+
+  // ========= Endpoints (CORSにより必要ならproxyに切替) =========
+  // そのまま直叩き
+  let REST_URL = "https://mainnet.zklighter.elliot.ai/api/v1/orderBookOrders";
+  let WS_URL   = "wss://mainnet.zklighter.elliot.ai/stream";
+
+  // proxyを使う場合：下記に切り替え（proxy.py 使用時）
+  // REST_URL = "/api/orderBookOrders";
+  // WS_URL   = "wss://mainnet.zklighter.elliot.ai/stream";
+
+  // ========= Tape buffer =========
+  const TAPE_MAXLEN = 400;
+  let tape = []; // newest appended at end. Each: {size, taker, maker, side}
+  let ws = null;
+  let wsConnected = false;
+  let paused = false;
+
+  // ========= Helpers =========
+  const D = (x) => Number(x);
+  const fmtNum = (x) => {
+    if (x === null || x === undefined) return "";
+    const s = String(x);
+    // 末尾0トリム（小数）
+    if (!s.includes(".")) return s;
+    return s.replace(/0+$/,"").replace(/\.$/,"");
+  };
+
+  function normalizeOwnerHtml(owner) {
+    if (owner === null || owner === undefined || owner === "") return "";
+    const key = String(owner);
+    const label = TAGS[key];
+    if (label) return `<span class="tag">${escapeHtml(label)}</span>`;
+    return escapeHtml(key);
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#39;");
+  }
+
+  function uniqJoinLimitedHtml(values, maxShow=3) {
+    const seen = new Set();
+    const out = [];
+    for (const v of values) {
+      if (v === null || v === undefined) continue;
+      const key = String(v);
+      const label = TAGS[key] ? `__tag__:${TAGS[key]}` : key;
+      if (seen.has(label)) continue;
+      seen.add(label);
+      if (TAGS[key]) out.push(`<span class="tag">${escapeHtml(TAGS[key])}</span>`);
+      else out.push(escapeHtml(key));
+    }
+    if (out.length <= maxShow) return out.join("/");
+    const head = out.slice(0, maxShow).join("/");
+    return `${head} <span class="muted">+${out.length - maxShow}</span>`;
+  }
+
+  function aggregateByPrice(orders, side) {
+    // price -> {size:number, owners:[...]}
+    const buckets = new Map();
+    for (const o of (orders || [])) {
+      const p = String(o.price);
+      const sz = D(o.remaining_base_amount || 0);
+      const owner = o.owner_account_index;
+
+      if (!buckets.has(p)) buckets.set(p, {size:0, owners:[]});
+      const b = buckets.get(p);
+      b.size += sz;
+      b.owners.push(owner);
+    }
+    const items = [];
+    for (const [price, b] of buckets.entries()) {
+      items.push({
+        price,
+        size: b.size,
+        ownersHtml: uniqJoinLimitedHtml(b.owners, 3),
+      });
+    }
+    items.sort((a,b) => side === "bid" ? (D(b.price) - D(a.price)) : (D(a.price) - D(b.price)));
+    return items;
+  }
+
+  function computeCumulative(levelsBestToWorse) {
+    let run = 0;
+    return levelsBestToWorse.map(lv => {
+      run += lv.size;
+      return {lv, sz: lv.size, cum: run};
+    });
+  }
+
+  function sideFromTrade(tr) {
+    // is_maker_ask: true => taker BUY, false => taker SELL
+    if (tr.is_maker_ask === true) return "buy";
+    if (tr.is_maker_ask === false) return "sell";
+    return "";
+  }
+
+  function calcTakerMaker(tr) {
+    // maker is ask => taker is bid (buy)
+    // maker is bid => taker is ask (sell)
+    const ask = tr.ask_account_id;
+    const bid = tr.bid_account_id;
+    if (tr.is_maker_ask === true) return {taker: bid, maker: ask};
+    if (tr.is_maker_ask === false) return {taker: ask, maker: bid};
+    return {taker: null, maker: null};
+  }
+
+  // ========= Rendering =========
+  const obTbody = document.getElementById("obTbody");
+  function renderOrderbook(obJson) {
+    const asksL2 = aggregateByPrice(obJson.asks, "ask").slice(0, DISPLAY_LEVELS);
+    const bidsL2 = aggregateByPrice(obJson.bids, "bid").slice(0, DISPLAY_LEVELS);
+
+    const asks = computeCumulative(asksL2);
+    const bids = computeCumulative(bidsL2);
+
+    // 表示順：asksは遠い方→best ask、bidsはbest bid→遠い方
+    const asksDisp = [...asks].reverse();
+    const bidsDisp = bids;
+
+    // max size for bar
+    const maxSz = Math.max(0, ...asks.map(x=>x.sz), ...bids.map(x=>x.sz));
+
+    // tape assignment: newest-first
+    const totalRows = asksDisp.length + bidsDisp.length;
+    const tapeNewestFirst = [...tape].slice(-totalRows).reverse(); // newest first
+    while (tapeNewestFirst.length < totalRows) tapeNewestFirst.push(null);
+
+    let i = 0;
+    let html = "";
+
+    function barPct(v, max) {
+      if (!max || max <= 0) return 0;
+      let pct = (v / max) * 100;
+      if (pct < 0) pct = 0;
+      if (pct > 100) pct = 100;
+      return pct;
+    }
+
+    for (const row of asksDisp) {
+      const {lv, sz, cum} = row;
+      const t = tapeNewestFirst[i++];
+      const tapeSize = t ? fmtNum(t.size) : "";
+      const tmHtml = t ? `${normalizeOwnerHtml(t.taker)}/${normalizeOwnerHtml(t.maker)}` : "";
+      const tapeCls = t?.side === "buy" ? "buy" : (t?.side === "sell" ? "sell" : "");
+      const pct = barPct(sz, maxSz);
+      html += `
+        <tr>
+          <td class="ask">${escapeHtml(lv.price)}</td>
+          <td class="ask">
+            <div class="sizeCell">
+              <span>${fmtNum(sz)}</span>
+              <span class="bar ask"><div style="width:${pct}%"></div></span>
+            </div>
+          </td>
+          <td class="ask">${fmtNum(cum.toFixed(4))}</td>
+          <td class="ask">${lv.ownersHtml}</td>
+          <td class="${tapeCls}">${escapeHtml(tapeSize)}</td>
+          <td class="${tapeCls}">${tmHtml}</td>
+        </tr>
+      `;
+    }
+
+    for (const row of bidsDisp) {
+      const {lv, sz, cum} = row;
+      const t = tapeNewestFirst[i++];
+      const tapeSize = t ? fmtNum(t.size) : "";
+      const tmHtml = t ? `${normalizeOwnerHtml(t.taker)}/${normalizeOwnerHtml(t.maker)}` : "";
+      const tapeCls = t?.side === "buy" ? "buy" : (t?.side === "sell" ? "sell" : "");
+      const pct = barPct(sz, maxSz);
+      html += `
+        <tr>
+          <td class="bid">${escapeHtml(lv.price)}</td>
+          <td class="bid">
+            <div class="sizeCell">
+              <span>${fmtNum(sz)}</span>
+              <span class="bar bid"><div style="width:${pct}%"></div></span>
+            </div>
+          </td>
+          <td class="bid">${fmtNum(cum.toFixed(4))}</td>
+          <td class="bid">${lv.ownersHtml}</td>
+          <td class="${tapeCls}">${escapeHtml(tapeSize)}</td>
+          <td class="${tapeCls}">${tmHtml}</td>
+        </tr>
+      `;
+    }
+
+    obTbody.innerHTML = html;
+    document.getElementById("tapeStatus").textContent = `Tape: ${tape.length}`;
+  }
+
+  // ========= REST loop =========
+  let restTimer = null;
+  async function restFetchOnce() {
+    if (paused) return;
+    const restStatus = document.getElementById("restStatus");
+    const errStatus = document.getElementById("errStatus");
+    try {
+      const url = new URL(REST_URL, location.origin);
+      // REST_URLが絶対URLの場合でもURL()が通るように
+      const u = REST_URL.startsWith("http") ? new URL(REST_URL) : url;
+      u.searchParams.set("market_id", String(MARKET_ID));
+      u.searchParams.set("limit", String(FETCH_LIMIT));
+
+      const r = await fetch(u.toString(), {headers:{accept:"application/json"}});
+      if (!r.ok) throw new Error(`REST ${r.status}`);
+      const data = await r.json();
+      renderOrderbook(data);
+      restStatus.textContent = `REST: OK (${new Date().toLocaleTimeString()})`;
+      errStatus.textContent = "OK";
+    } catch (e) {
+      restStatus.textContent = `REST: ERROR`;
+      errStatus.textContent = String(e);
+      // CORSっぽい時のヒント
+      // ここで自動切替はしない（勝手に変えると混乱するので）
+    }
+  }
+
+  function startRestLoop() {
+    stopRestLoop();
+    restFetchOnce();
+    restTimer = setInterval(restFetchOnce, REST_INTERVAL_MS);
+  }
+  function stopRestLoop() {
+    if (restTimer) clearInterval(restTimer);
+    restTimer = null;
+  }
+
+  // ========= WS tape =========
+  function wsConnect() {
+    wsClose();
+    const wsStatus = document.getElementById("wsStatus");
+    const errStatus = document.getElementById("errStatus");
+
+    ws = new WebSocket(WS_URL);
+    wsStatus.textContent = "WS: connecting...";
+    wsStatus.className = "pill";
+
+    ws.onopen = () => {
+      wsConnected = true;
+      wsStatus.textContent = "WS: connected";
+      wsStatus.className = "pill";
+      errStatus.textContent = "OK";
+      ws.send(JSON.stringify({type:"subscribe", channel:`trade/${MARKET_ID}`}));
+    };
+
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data);
+        if (msg.type !== "update/trade") return;
+        const trades = msg.trades || [];
+        for (const tr of trades) {
+          const side = sideFromTrade(tr);
+          const {taker, maker} = calcTakerMaker(tr);
+          tape.push({
+            size: tr.size ?? "",
+            taker,
+            maker,
+            side
+          });
+          if (tape.length > TAPE_MAXLEN) tape.shift();
+        }
+      } catch {}
+    };
+
+    ws.onerror = () => {
+      wsStatus.textContent = "WS: error";
+      wsConnected = false;
+    };
+
+    ws.onclose = () => {
+      wsConnected = false;
+      wsStatus.textContent = "WS: disconnected (reconnecting...)";
+      // 自動再接続
+      setTimeout(() => wsConnect(), 1000);
+    };
+  }
+
+  function wsClose() {
+    if (ws) {
+      try { ws.close(); } catch {}
+    }
+    ws = null;
+  }
+
+  // ========= Tag UI =========
+  const tagTbody = document.getElementById("tagTbody");
+  const tagIndex = document.getElementById("tagIndex");
+  const tagLabel = document.getElementById("tagLabel");
+  const jsonBox = document.getElementById("jsonBox");
+
+  function renderTagTable() {
+    const entries = Object.entries(TAGS)
+      .filter(([k,v]) => k && v)
+      .sort((a,b) => Number(a[0]) - Number(b[0]));
+    let html = "";
+    for (const [idx, label] of entries) {
+      html += `
+        <tr>
+          <td>${escapeHtml(idx)}</td>
+          <td><span class="tag">${escapeHtml(label)}</span></td>
+          <td>
+            <div class="tagActions">
+              <button class="small" data-act="edit" data-idx="${escapeHtml(idx)}">edit</button>
+              <button class="small danger" data-act="del" data-idx="${escapeHtml(idx)}">del</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }
+    tagTbody.innerHTML = html;
+    jsonBox.value = JSON.stringify(TAGS, null, 2);
+  }
+
+  tagTbody.addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    const act = btn.dataset.act;
+    const idx = btn.dataset.idx;
+    if (!idx) return;
+
+    if (act === "edit") {
+      tagIndex.value = idx;
+      tagLabel.value = TAGS[idx] || "";
+      tagIndex.focus();
+    } else if (act === "del") {
+      delete TAGS[idx];
+      saveTags();
+      jsonBox.value = JSON.stringify(TAGS, null, 2);
+    }
+  });
+
+  document.getElementById("addUpdateBtn").addEventListener("click", () => {
+    const idx = (tagIndex.value || "").trim();
+    const label = (tagLabel.value || "").trim();
+    if (!idx || !/^\d+$/.test(idx)) return alert("Account Index は数字で入力してください");
+    if (!label) return alert("Label を入力してください");
+    TAGS[idx] = label;
+    saveTags();
+    jsonBox.value = JSON.stringify(TAGS, null, 2);
+  });
+
+  document.getElementById("clearFormBtn").addEventListener("click", () => {
+    tagIndex.value = "";
+    tagLabel.value = "";
+  });
+
+  document.getElementById("exportBtn").addEventListener("click", async () => {
+    jsonBox.value = JSON.stringify(TAGS, null, 2);
+    await navigator.clipboard.writeText(jsonBox.value);
+    alert("JSONをコピーしました");
+  });
+
+  document.getElementById("copyJsonBtn").addEventListener("click", async () => {
+    await navigator.clipboard.writeText(jsonBox.value || "");
+    alert("コピーしました");
+  });
+
+  document.getElementById("applyJsonBtn").addEventListener("click", () => {
+    try {
+      const obj = JSON.parse(jsonBox.value);
+      if (!obj || typeof obj !== "object") throw new Error("invalid");
+      TAGS = obj;
+      saveTags();
+    } catch {
+      alert("JSONが不正です");
+    }
+  });
+
+  document.getElementById("importBtn").addEventListener("click", () => {
+    alert("下のテキスト欄にJSONを貼って「JSON適用」を押してください");
+    jsonBox.focus();
+  });
+
+  document.getElementById("resetBtn").addEventListener("click", () => {
+    if (!confirm("初期タグに戻しますか？")) return;
+    TAGS = {...DEFAULT_TAGS};
+    saveTags();
+    jsonBox.value = JSON.stringify(TAGS, null, 2);
+  });
+
+  // ========= Controls =========
+  const marketInput = document.getElementById("marketInput");
+  const restIntervalInput = document.getElementById("restIntervalInput");
+  const pauseBtn = document.getElementById("pauseBtn");
+
+  document.getElementById("applyBtn").addEventListener("click", () => {
+    const m = Number(marketInput.value);
+    const ri = Number(restIntervalInput.value);
+    if (!Number.isFinite(m) || m <= 0) return alert("Marketが不正です");
+    if (!Number.isFinite(ri) || ri <= 0.1) return alert("REST intervalが不正です");
+
+    MARKET_ID = m;
+    REST_INTERVAL_MS = Math.floor(ri * 1000);
+
+    tape = []; // 市場変更時はTapeクリア
+    document.getElementById("endpointPill").textContent = `REST: /orderBookOrders | WS: /stream | market=${MARKET_ID}`;
+
+    // restart loops
+    startRestLoop();
+    wsConnect();
+  });
+
+  pauseBtn.addEventListener("click", () => {
+    paused = !paused;
+    pauseBtn.textContent = paused ? "再開" : "一時停止";
+  });
+
+  // ========= Boot =========
+  renderTagTable();
+  document.getElementById("endpointPill").textContent = `REST: /orderBookOrders | WS: /stream | market=${MARKET_ID}`;
+  startRestLoop();
+  wsConnect();
+})();
+</script>
+</body>
+</html>
